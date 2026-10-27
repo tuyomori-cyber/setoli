@@ -1,0 +1,71 @@
+# Setoli 仕様書 v0.1.0
+
+- 文書バージョン：0.1.0
+- 状態：MVP実装仕様
+- 対象環境：Foxbook専用 Firefox（Linux / Cage）
+
+## 1. 目的
+
+Setoli は、`~/score` 内にある Markdown（`.md`）と PDF（`.pdf`）を Firefox のローカルブックマークとして整理・起動する Firefox 拡張である。
+
+登録済みファイルを1操作で Firefox の新規タブに開き、フォルダ内の登録ファイルを最大10件までまとめて開けることを主目的とする。
+
+## 2. 管理対象と安全境界
+
+- 読み取り対象は `~/score` とその配下だけとする。
+- 対応形式は拡張子を大文字小文字を区別せず `.md` と `.pdf` に限定する。
+- ファイル本体は作成、更新、移動、削除しない。Setoli が変更するのは Firefox のブックマークデータにある `file://` URL と、拡張の検査用メタデータだけである。
+- `~/score` 外を指すパス、解決後に `~/score` 外へ出るシンボリックリンク、対応外形式は Native Host が拒否する。
+
+## 3. ブックマーク構造
+
+- Firefox の「その他のブックマーク」直下に `Setoli` フォルダを1つ作成する。
+- `Setoli` 配下のフォルダとファイルブックマークを Setoli が管理する。
+- フォルダは任意名で、入れ子を許可する。
+- ファイルブックマークの URL は、正規化したローカルファイルの `file://` URL とする。
+- Setoli の画面で削除した場合は、対応する Firefox ブックマークだけを削除する。対象ファイルは残す。
+
+## 4. 画面と操作
+
+- 拡張のツールバーボタンから Setoli 画面を開く。
+- フォルダの作成、フォルダへのファイル登録、フォルダ／ファイルの削除、ファイルの起動を行える。
+- ファイル追加時は Firefox のファイル選択ダイアログに依存しない。Native Host から `~/score` 内のフォルダ一覧と対応ファイル一覧を取得し、拡張画面内で選ぶ。
+- ファイル名の操作は、その1件を新規タブで開く。
+- 「このフォルダを開く」は子孫フォルダも含む登録ファイルを収集し、10件以下なら一括で開く。11件以上なら開かず、件数超過を表示する。
+- PDF は Firefox 内蔵 PDF ビューアで開く。Markdown は Firefox の通常表示に委ねる。
+
+## 5. 新規タブ起動
+
+Firefox WebExtension API は `file://` URL を直接 `tabs.create()` できない。そのため拡張は Native Messaging Host に起動を依頼する。
+
+- Host はインストーラーに記録された Foxbook Firefox 実行ファイルを使用する。
+- Host は検証済み URL を `Firefox --new-tab file://...` として、シェルを介さず引数配列で起動する。
+- 一括起動では `--new-tab URL` を最大10回指定する。
+- Cage 実機で、単体および10件の `--new-tab file://...` 起動による新規タブ追加を確認済みである。
+
+## 6. Native Messaging
+
+- 拡張 ID は `setoli@foxbook.example` に固定する。
+- Host 名は `setoli` とする。
+- ユーザー単位の Host 定義を `~/.mozilla/native-messaging-hosts/setoli.json` に配置する。
+- Host 定義の `allowed_extensions` は `setoli@foxbook.example` だけを許可する。
+- Host は標準入出力の Native Messaging JSON だけを通信に使い、診断は標準エラーへ出す。
+
+## 7. リンク検査と自動修復
+
+拡張を開いた時、Setoli 配下の登録ファイルを Host に検査させる。
+
+1. 現在の URL のパスが存在すれば、サイズ、更新時刻、SHA-256 を再取得してメタデータを更新する。
+2. パスが存在しなければ、`~/score` 内だけを再帰検索する。
+3. 保存済みサイズで候補を絞り、SHA-256 が一致する候補を求める。
+4. 一致候補が1件なら、Firefox ブックマークの URL とメタデータを自動更新する。
+5. 一致候補が0件なら「見つからない」、2件以上なら「要確認」とする。複数候補からは自動選択しない。
+
+検査用メタデータは、Firefox ブックマーク ID をキーに `browser.storage.local` に保存する。保持項目は SHA-256、サイズ、更新時刻、ファイル名、score 相対パスである。
+
+## 8. インストールと検証
+
+- `scripts/install_host.py --firefox /absolute/path/to/firefox` は Host 本体、Firefox 実行ファイル設定、Host 定義をユーザー領域へ導入する。
+- Snap／Flatpak 版 Firefox は対象外とする。
+- Native Host の単体試験は、パス境界、形式制限、ハッシュによる自動修復、重複候補、最大10件制限、Firefox 起動引数を検証する。
+- 実機では単体起動、10件一括起動、PDF表示、Markdown表示、移動後の自動修復、重複候補時の要確認表示を確認する。

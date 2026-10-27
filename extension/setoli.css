@@ -1,0 +1,9 @@
+:root { color-scheme: light dark; font: 16px system-ui, sans-serif; }
+body { max-width: 760px; margin: 1rem auto; padding: 0 1rem; }
+h1 { margin-bottom: .2rem; } #status { min-height: 1.5rem; }
+button { font: inherit; padding: .45rem .7rem; margin: .15rem; }
+.actions { margin: 1rem 0; } ul { list-style: none; padding: 0; }
+li { display: flex; align-items: center; gap: .5rem; border-bottom: 1px solid #8885; padding: .45rem 0; }
+li button:first-child { flex: 1; text-align: left; } .remove { color: #b11; }
+nav button { border: 0; text-decoration: underline; background: transparent; }
+dialog { min-width: min(90vw, 560px); max-height: 85vh; overflow: auto; }
