@@ -10,16 +10,26 @@
   <header><h1>Setoli</h1><p id="status" role="status">読み込み中…</p></header>
   <main>
     <section class="actions">
-      <button id="new-folder" type="button">フォルダを作成</button>
-      <button id="add-file" type="button">scoreから追加</button>
-      <button id="open-folder" type="button">このフォルダを開く</button>
-      <button id="repair" type="button">リンクを検査</button>
+      <button id="new-folder" type="button">NewSet</button>
+      <button id="add-file" type="button">Add</button>
+      <button id="open-folder" type="button">AllOpen</button>
+      <button id="repair" type="button">Scan</button>
+      <button id="settings" type="button">Setting</button>
     </section>
     <nav id="breadcrumbs" aria-label="現在のフォルダ"></nav>
     <ul id="entries" aria-label="ブックマーク一覧"></ul>
   </main>
   <dialog id="picker">
     <form method="dialog"><h2>scoreからファイルを追加</h2><p id="picker-path"></p><nav id="picker-breadcrumbs"></nav><ul id="picker-entries"></ul><menu><button value="cancel">閉じる</button></menu></form>
+  </dialog>
+  <dialog id="settings-page">
+    <form method="dialog"><h2>設定</h2><button id="change-skin" type="button">スキンを変更</button><menu><button value="cancel">閉じる</button></menu></form>
+  </dialog>
+  <dialog id="skin-page">
+    <form method="dialog"><h2>スキンを変更</h2><menu><button id="skin-back" type="button">戻る</button></menu></form>
+  </dialog>
+  <dialog id="entry-menu">
+    <form method="dialog"><h2 id="entry-menu-title">項目メニュー</h2><button id="delete-entry" class="remove" type="button">削除</button><menu><button value="cancel">閉じる</button></menu></form>
   </dialog>
   <script src="setoli.js"></script>
 </body>

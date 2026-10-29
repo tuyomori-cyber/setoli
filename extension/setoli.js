@@ -2,9 +2,70 @@ const OTHER_BOOKMARKS_ID = "unfiled_____";
 const ROOT_TITLE = "Setoli";
 const MAX_OPEN_FILES = 10;
 let rootId, currentId;
+let menuNode, dragState;
 
 const $ = (id) => document.getElementById(id);
+function entryIcon(type) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  svg.classList.add("entry-icon");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  path.setAttribute("d", type === "folder"
+    ? "M3.5 6.5h6l2 2h9v9.75A2.25 2.25 0 0 1 18.25 20.5h-14A2.25 2.25 0 0 1 2 18.25v-9.5A2.25 2.25 0 0 1 4.25 6.5Z"
+    : "M6.5 2.75h7l4 4v14.5H6.5A2.25 2.25 0 0 1 4.25 19V5A2.25 2.25 0 0 1 6.5 2.75Zm6.5.5v4h4");
+  svg.append(path);
+  return svg;
+}
+function setEntryLabel(button, type, text) { button.replaceChildren(entryIcon(type), document.createTextNode(text)); }
 function setStatus(message) { $("status").textContent = message; }
+async function removeEntry(node) {
+  if (!node || !confirm(`「${node.title}」のブックマークを削除しますか？`)) return;
+  await browser.bookmarks.removeTree(node.id);
+  const metadata = await metaStore(); delete metadata[node.id]; await saveMeta(metadata); await render();
+}
+function clearDragState() {
+  if (!dragState) return;
+  dragState.item.classList.remove("dragging");
+  dragState.target?.classList.remove("drop-before", "drop-after");
+  dragState = undefined;
+}
+async function moveFileToTarget(source, target, placeAfter) {
+  const entries = await browser.bookmarks.getChildren(currentId);
+  const sourceIndex = entries.findIndex((entry) => entry.id === source.id);
+  const targetIndex = entries.findIndex((entry) => entry.id === target.dataset.bookmarkId);
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return;
+  const targetPosition = targetIndex - (sourceIndex < targetIndex ? 1 : 0);
+  const index = targetPosition + (placeAfter ? 1 : 0);
+  await browser.bookmarks.move(source.id, { parentId: currentId, index });
+  await render();
+}
+function beginFileDrag(event, node, item) {
+  event.preventDefault();
+  const state = { node, item, target: undefined, placeAfter: false };
+  dragState = state; item.classList.add("dragging");
+  const move = (moveEvent) => {
+    const target = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest("li[data-bookmark-id][data-file]");
+    state.target?.classList.remove("drop-before", "drop-after");
+    if (!target || target === item) { state.target = undefined; return; }
+    state.target = target;
+    state.placeAfter = moveEvent.clientY > target.getBoundingClientRect().top + target.offsetHeight / 2;
+    target.classList.add(state.placeAfter ? "drop-after" : "drop-before");
+  };
+  const finish = async () => {
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", finish);
+    document.removeEventListener("pointercancel", finish);
+    const { target, placeAfter } = state;
+    clearDragState();
+    if (!target) return;
+    try { await moveFileToTarget(node, target, placeAfter); setStatus("ファイルの順番を変更しました。"); }
+    catch (error) { setStatus(error.message); }
+  };
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", finish, { once: true });
+  document.addEventListener("pointercancel", finish, { once: true });
+}
 async function native(message) {
   const result = await browser.runtime.sendMessage(message);
   if (!result.success) throw new Error(result.error?.message || "Native Hostとの通信に失敗しました。");
@@ -37,35 +98,33 @@ async function render() {
   const entries = await browser.bookmarks.getChildren(currentId);
   const list = $("entries"); list.replaceChildren();
   for (const node of entries) {
-    const item = document.createElement("li"), open = document.createElement("button"), remove = document.createElement("button");
+    const item = document.createElement("li"), open = document.createElement("button"), more = document.createElement("button");
+    open.className = "entry-open";
+    item.dataset.bookmarkId = node.id;
+    if (node.type !== "folder") item.dataset.file = "true";
     const metadata = await metaStore();
     const issue = metadata[node.id]?.repairStatus;
     const suffix = issue === "ambiguous" ? "（要確認）" : issue === "missing" ? "（見つかりません）" : "";
-    open.textContent = node.type === "folder" ? `📁 ${node.title}` : `📄 ${node.title}${suffix}`;
+    setEntryLabel(open, node.type, `${node.title}${suffix}`);
     open.onclick = async () => {
       try { if (node.type === "folder") { currentId = node.id; await render(); } else { await native({ action: "open", urls: [node.url] }); setStatus(`開きました: ${node.title}`); } }
       catch (error) { setStatus(error.message); }
     };
-    remove.textContent = "削除"; remove.className = "remove";
-    remove.onclick = async () => { if (confirm(`「${node.title}」のブックマークを削除しますか？`)) { await browser.bookmarks.removeTree(node.id); const metadata = await metaStore(); delete metadata[node.id]; await saveMeta(metadata); await render(); } };
-    item.append(open);
-    if (node.url) {
-      const direct = document.createElement("a");
-      direct.href = node.url;
-      direct.target = "_blank";
-      direct.rel = "noopener";
-      direct.textContent = "リンクで開く（試験）";
-      direct.addEventListener("click", () => setStatus(`リンクを開いています: ${node.title}`));
-      item.append(direct);
+    more.textContent = "⋮"; more.className = "more"; more.setAttribute("aria-label", `${node.title} のメニュー`);
+    more.onclick = () => { menuNode = node; $("entry-menu-title").textContent = node.title; $("entry-menu").showModal(); };
+    if (node.type !== "folder") {
+      const handle = document.createElement("button");
+      handle.type = "button"; handle.className = "drag-handle"; handle.textContent = "⠿";
+      handle.setAttribute("aria-label", `${node.title} をドラッグして並べ替え`);
+      handle.onpointerdown = (event) => beginFileDrag(event, node, item);
+      item.append(handle);
     }
-    item.append(remove); list.append(item);
+    item.append(open, more); list.append(item);
   }
   setStatus(`${entries.length}件`);
 }
-async function descendantUrls(folderId) {
-  const node = (await browser.bookmarks.getSubTree(folderId))[0], urls = [];
-  const visit = (entry) => { if (entry.url) urls.push(entry.url); for (const child of entry.children || []) visit(child); };
-  visit(node); return urls;
+async function currentFolderUrls() {
+  return (await browser.bookmarks.getChildren(currentId)).flatMap((node) => node.url ? [node.url] : []);
 }
 async function repairLinks() {
   const entries = await browser.bookmarks.getSubTree(rootId), metadata = await metaStore(), records = [];
@@ -84,19 +143,31 @@ async function showPicker(relativePath = "") {
   const data = await native({ action: "list_directory", relativePath });
   $("picker-path").textContent = `score/${data.path}`;
   const list = $("picker-entries"); list.replaceChildren();
-  const add = (text, handler) => { const li = document.createElement("li"), button = document.createElement("button"); button.textContent = text; button.onclick = handler; li.append(button); list.append(li); };
+  const add = (text, handler, type) => { const li = document.createElement("li"), button = document.createElement("button"); if (type) setEntryLabel(button, type, text); else button.textContent = text; button.onclick = handler; li.append(button); list.append(li); };
   if (data.path) add("↩ 親フォルダ", () => showPicker(data.path.split("/").slice(0, -1).join("/")));
-  for (const folder of data.folders) add(`📁 ${folder.name}`, () => showPicker(folder.relativePath));
-  for (const file of data.files) add(`📄 ${file.name}`, async () => {
+  for (const folder of data.folders) add(folder.name, () => showPicker(folder.relativePath), "folder");
+  for (const file of data.files) add(file.name, async () => {
     try { const fingerprint = await native({ action: "fingerprint", url: file.url }); const node = await browser.bookmarks.create({ parentId: currentId, title: file.name, url: fingerprint.url }); const metadata = await metaStore(); metadata[node.id] = fingerprint; await saveMeta(metadata); $("picker").close(); await render(); }
     catch (error) { setStatus(error.message); }
-  });
+  }, "file");
   $("picker").showModal();
 }
 $("new-folder").onclick = async () => { const title = prompt("フォルダ名"); if (title?.trim()) { await browser.bookmarks.create({ parentId: currentId, title: title.trim() }); await render(); } };
-$("add-file").onclick = () => showPicker().catch((error) => setStatus(error.message));
-$("open-folder").onclick = async () => { try { const urls = await descendantUrls(currentId); if (!urls.length) return setStatus("このフォルダにファイルはありません。"); if (urls.length > MAX_OPEN_FILES) return setStatus(`一括で開けるのは最大${MAX_OPEN_FILES}件です（${urls.length}件）。`); await native({ action: "open", urls }); setStatus(`${urls.length}件を開きました。`); } catch (error) { setStatus(error.message); } };
+$("add-file").onclick = () => {
+  if (currentId === rootId) return setStatus("ファイルはディレクトリ内で追加してください。");
+  showPicker().catch((error) => setStatus(error.message));
+};
+$("open-folder").onclick = async () => { try { if (currentId === rootId) return setStatus("ルートではファイルを開けません。"); const urls = await currentFolderUrls(); if (!urls.length) return setStatus("このディレクトリにファイルはありません。"); if (urls.length > MAX_OPEN_FILES) return setStatus(`一括で開けるのは最大${MAX_OPEN_FILES}件です（${urls.length}件）。`); await native({ action: "open", urls }); setStatus(`${urls.length}件を開きました。`); } catch (error) { setStatus(error.message); } };
 $("repair").onclick = () => repairLinks().catch((error) => setStatus(error.message));
+$("settings").onclick = () => $("settings-page").showModal();
+$("change-skin").onclick = () => { $("settings-page").close(); $("skin-page").showModal(); };
+$("skin-back").onclick = () => { $("skin-page").close(); $("settings-page").showModal(); };
+$("delete-entry").onclick = async () => {
+  $("entry-menu").close();
+  try { await removeEntry(menuNode); }
+  catch (error) { setStatus(error.message); }
+  finally { menuNode = undefined; }
+};
 async function initialize() {
   await render();
   await repairLinks();
