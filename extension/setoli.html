@@ -20,10 +20,19 @@
     <ul id="entries" aria-label="ブックマーク一覧"></ul>
   </main>
   <dialog id="picker">
-    <form method="dialog"><h2>scoreからファイルを追加</h2><p id="picker-path"></p><nav id="picker-breadcrumbs"></nav><ul id="picker-entries"></ul><menu><button value="cancel">閉じる</button></menu></form>
+    <form method="dialog"><h2>ルートからファイルを追加</h2><p id="picker-path"></p><nav id="picker-breadcrumbs"></nav><ul id="picker-entries"></ul><menu><button value="cancel">閉じる</button></menu></form>
   </dialog>
   <dialog id="settings-page">
-    <form method="dialog"><h2>設定</h2><button id="change-skin" type="button">スキンを変更</button><menu><button value="cancel">閉じる</button></menu></form>
+    <form method="dialog"><h2>設定</h2><p>端末名: <span id="settings-device"></span></p><p>ルート: <span id="settings-root"></span></p><button id="change-root" type="button">ルートディレクトリを変更</button><button id="change-skin" type="button">スキンを変更</button><menu><button value="cancel">閉じる</button></menu></form>
+  </dialog>
+  <dialog id="device-setup">
+    <form id="device-setup-form"><h2>この端末を登録</h2><p>端末名を決めてから、管理するローカルルートを設定してください。</p><label>端末名<input id="device-name" required autocomplete="off" placeholder="surface-main"></label><label>ルートディレクトリ（絶対パス）<input id="initial-root-path" required type="text" placeholder="/home/user/score"></label><menu><button type="submit">登録</button></menu></form>
+  </dialog>
+  <dialog id="root-change">
+    <form id="root-change-form"><h2>ルートディレクトリを変更</h2><p>以後の追加・起動・Scan は新しいルートだけを対象にします。既存ブックマークは変更しません。</p><label>ルートディレクトリ（絶対パス）<input id="changed-root-path" required type="text"></label><menu><button id="root-change-cancel" type="button">キャンセル</button><button type="submit">変更を保存</button></menu></form>
+  </dialog>
+  <dialog id="scan-results">
+    <form method="dialog"><h2>Scan 結果</h2><p>検索範囲: <span id="scan-root"></span></p><ul id="scan-results-list"></ul><menu><button value="cancel">閉じる</button></menu></form>
   </dialog>
   <dialog id="skin-page">
     <form method="dialog"><h2>スキンを変更</h2><menu><button id="skin-back" type="button">戻る</button></menu></form>

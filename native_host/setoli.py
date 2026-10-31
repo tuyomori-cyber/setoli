@@ -22,7 +22,6 @@ MAX_REQUEST_BYTES = 1_000_000
 MAX_OPEN_FILES = 10
 MAX_REPAIR_RECORDS = 2_000
 SUPPORTED_SUFFIXES = {".md", ".pdf"}
-SCORE_ROOT = Path.home() / "score"
 CONFIG_PATH = Path(__file__).resolve().with_name("config.json")
 
 
@@ -38,17 +37,48 @@ def inside_root(path: Path, root: Path) -> bool:
     return True
 
 
-def checked_root(root: Path = SCORE_ROOT) -> Path:
+def checked_root(root: Path) -> Path:
     resolved = root.resolve(strict=True)
     if not resolved.is_dir():
-        raise ValueError("scoreフォルダを確認できません。")
+        raise ValueError("ルートディレクトリを確認できません。")
     return resolved
+
+
+def read_config(config_path: Path = CONFIG_PATH) -> dict[str, Any]:
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    if not isinstance(config, dict):
+        raise ValueError("Setoliの設定を確認できません。")
+    return config
+
+
+def configured_root(config_path: Path = CONFIG_PATH) -> Path:
+    root = read_config(config_path).get("root")
+    if not isinstance(root, str) or not root:
+        raise ValueError("ルートディレクトリが未設定です。Setting で設定してください。")
+    candidate = Path(root)
+    if not candidate.is_absolute():
+        raise ValueError("ルートディレクトリの設定が正しくありません。")
+    return checked_root(candidate)
+
+
+def configure_root(value: Any, config_path: Path = CONFIG_PATH) -> Path:
+    if not isinstance(value, str) or not value:
+        raise ValueError("ルートディレクトリは絶対パスで指定してください。")
+    candidate = Path(value)
+    if not candidate.is_absolute():
+        raise ValueError("ルートディレクトリは絶対パスで指定してください。")
+    root = checked_root(candidate)
+    config = read_config(config_path)
+    config["root"] = str(root)
+    config_path.write_text(json.dumps(config, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.chmod(config_path, 0o600)
+    return root
 
 
 def checked_file(path: Path, root: Path) -> Path:
     resolved = path.resolve(strict=True)
     if not resolved.is_file() or not inside_root(resolved, root):
-        raise ValueError("score内の通常ファイルを指定してください。")
+        raise ValueError("ルート内にある通常ファイルを指定してください。")
     if resolved.suffix.lower() not in SUPPORTED_SUFFIXES:
         raise ValueError("対応形式は Markdown と PDF だけです。")
     return resolved
@@ -109,8 +139,8 @@ def list_directory(relative_path: str, root: Path) -> dict[str, Any]:
 
 
 def find_repair_candidates(record: dict[str, Any], root: Path) -> list[Path]:
-    size, expected_hash = record.get("size"), record.get("sha256")
-    if type(size) is not int or size < 0 or not isinstance(expected_hash, str) or len(expected_hash) != 64:
+    size, expected_hash, expected_name = record.get("size"), record.get("sha256"), record.get("name")
+    if type(size) is not int or size < 0 or not isinstance(expected_hash, str) or len(expected_hash) != 64 or not isinstance(expected_name, str) or not expected_name:
         raise ValueError("修復用メタデータが正しくありません。")
     matches = []
     for path in root.rglob("*"):
@@ -118,7 +148,7 @@ def find_repair_candidates(record: dict[str, Any], root: Path) -> list[Path]:
             resolved = path.resolve(strict=True)
             if not resolved.is_file() or not inside_root(resolved, root) or resolved.suffix.lower() not in SUPPORTED_SUFFIXES:
                 continue
-            if resolved.stat().st_size == size and sha256(resolved) == expected_hash:
+            if resolved.name == expected_name and resolved.stat().st_size == size and sha256(resolved) == expected_hash:
                 matches.append(resolved)
         except OSError:
             continue
@@ -150,8 +180,7 @@ def repair(records: list[Any], root: Path) -> list[dict[str, Any]]:
 def firefox_command(urls: list[Any], root: Path, config_path: Path = CONFIG_PATH) -> list[str]:
     if not isinstance(urls, list) or not 1 <= len(urls) <= MAX_OPEN_FILES or not all(isinstance(url, str) for url in urls):
         raise ValueError(f"開けるファイル数は1から{MAX_OPEN_FILES}件です。")
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    firefox = config.get("firefox") if isinstance(config, dict) else None
+    firefox = read_config(config_path).get("firefox")
     if not isinstance(firefox, str) or not Path(firefox).is_absolute() or not os.access(firefox, os.X_OK):
         raise ValueError("Foxbook Firefoxの設定を確認できません。")
     command = [firefox]
@@ -160,12 +189,14 @@ def firefox_command(urls: list[Any], root: Path, config_path: Path = CONFIG_PATH
     return command
 
 
-def process_request(request: Any, *, root: Path = SCORE_ROOT, run: Callable[..., Any] = subprocess.run, config_path: Path = CONFIG_PATH) -> dict[str, Any]:
+def process_request(request: Any, *, root: Path | None = None, run: Callable[..., Any] = subprocess.run, config_path: Path = CONFIG_PATH) -> dict[str, Any]:
     if not isinstance(request, dict) or not isinstance(request.get("action"), str):
         return response(False, code="INVALID_REQUEST", message="要求の形式が正しくありません。")
     try:
-        safe_root = checked_root(root)
         action = request["action"]
+        if action == "configure_root" and set(request) == {"action", "rootPath"}:
+            return response(True, data={"rootPath": str(configure_root(request["rootPath"], config_path))})
+        safe_root = checked_root(root) if root is not None else configured_root(config_path)
         if action == "list_directory" and set(request) == {"action", "relativePath"}:
             return response(True, data=list_directory(request["relativePath"], safe_root))
         if action == "fingerprint" and set(request) == {"action", "url"} and isinstance(request["url"], str):

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Setoli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Foxbook のローカル Markdown／PDF ブックマークマネージャー",
   "browser_specific_settings": {"gecko": {"id": "setoli@foxbook.example"}},
   "permissions": ["bookmarks", "nativeMessaging", "storage"],

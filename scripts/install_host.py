@@ -37,7 +37,16 @@ def install(firefox: Path, home: Path) -> None:
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(SOURCE_HOST, host_path)
     os.chmod(host_path, 0o700)
-    config_path.write_text(json.dumps({"firefox": str(firefox)}, ensure_ascii=False) + "\n", encoding="utf-8")
+    config: dict[str, object] = {}
+    if config_path.is_file():
+        try:
+            saved = json.loads(config_path.read_text(encoding="utf-8"))
+            if isinstance(saved, dict):
+                config = saved
+        except (OSError, json.JSONDecodeError):
+            pass
+    config["firefox"] = str(firefox)
+    config_path.write_text(json.dumps(config, ensure_ascii=False) + "\n", encoding="utf-8")
     os.chmod(config_path, 0o600)
     manifest_path.write_text(json.dumps({
         "name": HOST_NAME,

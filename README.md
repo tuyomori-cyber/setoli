@@ -1,8 +1,8 @@
 # Setoli
 
-Foxbook専用 Firefox で `~/score` 内の Markdown と PDF を管理・起動するローカルブックマークマネージャーです。
+Foxbook専用 Firefox で、端末ごとに設定したローカルルート内の Markdown と PDF を管理・起動するローカルブックマークマネージャーです。
 
-`~/score` が存在しない場合、Native Host は安全のためファイル操作を拒否します。Surface では実際にファイルを置く `~/score` を作成してから利用します。
+初回起動時に端末名とルートディレクトリを登録します。各端末は `Setoli/<端末名>` のブックマーク領域だけを管理し、Firefox Sync で同居する他端末のブックマークは表示・操作しません。ルートディレクトリは Setting から後で変更できます。
 
 詳細は [仕様書](setoli_仕様書_v0.1.0.md) を参照してください。
 
@@ -19,6 +19,8 @@ python3 scripts/install_host.py --firefox "$HOME/.local/opt/foxbook-firefox/fire
 ```
 
 Firefox の `about:debugging` で `extension/manifest.json` を一時読み込みします。Native Host を更新したときは、インストーラーをもう一度実行します。
+
+v0.1.1以降は、初回登録またはルートディレクトリ変更の前にも、最新の Native Host をインストールしてください。
 
 ## 試験
 

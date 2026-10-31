@@ -191,6 +191,10 @@ dialog menu { display: flex; justify-content: flex-end; margin: 1.25rem 0 0; pad
 #picker-path { color: #aebfe2; }
 #picker-entries { margin: 0 -.4rem; }
 #picker-entries li { padding: .25rem .4rem; }
+dialog label { display: grid; gap: .4rem; margin-top: 1rem; color: #aebfe2; }
+dialog input { width: 100%; min-height: 44px; border: 1px solid #6f91b6; border-radius: 4px; padding: .55rem .65rem; color: #dceaff; background: #111522; font: inherit; }
+dialog input:focus-visible { outline: 3px solid #8ae5d8; outline-offset: 2px; }
+#settings-root, #scan-root { overflow-wrap: anywhere; }
 
 @media (max-width: 520px) {
   body { padding: .75rem; }

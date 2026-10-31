@@ -54,17 +54,25 @@ class SetoliHostTest(unittest.TestCase):
         old = self.add("old.md", "same contents")
         record = {"bookmarkId": "42", **setoli.fingerprint(old, self.root.resolve())}
         old.unlink()
-        moved = self.add("nested/new.md", "same contents")
+        moved = self.add("nested/old.md", "same contents")
         result = setoli.repair([record], self.root.resolve())
         self.assertEqual(result[0]["status"], "repaired")
         self.assertEqual(result[0]["fingerprint"]["url"], setoli.file_url(moved.resolve()))
+
+    def test_repair_does_not_use_a_same_hash_file_with_a_different_name(self) -> None:
+        old = self.add("test.pdf", "same contents")
+        record = {"bookmarkId": "42", **setoli.fingerprint(old, self.root.resolve())}
+        old.unlink()
+        self.add("file-a.pdf", "same contents")
+        result = setoli.repair([record], self.root.resolve())
+        self.assertEqual(result, [{"bookmarkId": "42", "status": "missing"}])
 
     def test_repair_keeps_ambiguous_duplicates_unresolved(self) -> None:
         old = self.add("old.md", "same contents")
         record = {"bookmarkId": "42", **setoli.fingerprint(old, self.root.resolve())}
         old.unlink()
-        self.add("a.md", "same contents")
-        self.add("b.md", "same contents")
+        self.add("first/old.md", "same contents")
+        self.add("second/old.md", "same contents")
         result = setoli.repair([record], self.root.resolve())
         self.assertEqual(result, [{"bookmarkId": "42", "status": "ambiguous"}])
 
@@ -88,6 +96,29 @@ class SetoliHostTest(unittest.TestCase):
         result = setoli.process_request({"action": "open", "urls": [setoli.file_url(path)]}, root=self.root, run=run, config_path=self.config)
         self.assertTrue(result["success"])
         self.assertEqual(calls[0][1:], ["--new-tab", setoli.file_url(path)])
+
+    def test_process_open_does_not_launch_when_file_was_deleted(self) -> None:
+        path = self.add("deleted.md").resolve()
+        path.unlink()
+        calls: list[list[str]] = []
+        def run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+            calls.append(command)
+            return subprocess.CompletedProcess(command, 0, "", "")
+        result = setoli.process_request({"action": "open", "urls": [setoli.file_url(path)]}, root=self.root, run=run, config_path=self.config)
+        self.assertFalse(result["success"])
+        self.assertEqual(calls, [])
+
+    def test_configured_root_is_saved_and_used_for_requests(self) -> None:
+        configured = setoli.process_request({"action": "configure_root", "rootPath": str(self.root)}, config_path=self.config)
+        self.assertTrue(configured["success"])
+        self.assertEqual(configured["data"]["rootPath"], str(self.root.resolve()))
+        listed = setoli.process_request({"action": "list_directory", "relativePath": ""}, config_path=self.config)
+        self.assertTrue(listed["success"])
+
+    def test_request_without_a_configured_root_is_rejected(self) -> None:
+        result = setoli.process_request({"action": "list_directory", "relativePath": ""}, config_path=self.config)
+        self.assertFalse(result["success"])
+        self.assertIn("未設定", result["error"]["message"])
 
 
 if __name__ == "__main__":
